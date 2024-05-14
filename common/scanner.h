@@ -98,25 +98,35 @@ static bool scan_pi_target(TSLexer *lexer, const bool *valid_symbols) {
 
 /// Scan for the content of a PI node
 static bool scan_pi_content(TSLexer *lexer) {
-    while (!lexer->eof(lexer) && lexer->lookahead != '\n' && lexer->lookahead != '?')
-        advance(lexer);
-
-    if (lexer->lookahead != '?')
-        return false;
-
-    lexer->mark_end(lexer);
-    advance(lexer);
-
-    if (lexer->lookahead == '>') {
-        advance(lexer);
-        while (lexer->lookahead == ' ')
+    // balance store number of opening vs closing PI.
+    // This is to correctly handle nested PI, but would fail if there is a lone opening <? or closing ?>.
+    int balance = 1;
+    while (true) {
+        if (lexer->eof(lexer))
+            return false;
+        else if (lexer->lookahead == '?') {
+            // this may be overridden by another mark_end due to a later "?>".
+            lexer->mark_end(lexer);
             advance(lexer);
-        advance_if_eq(lexer, '\n');
-        lexer->result_symbol = PI_CONTENT;
-        return true;
+            if (lexer->lookahead == '>') {
+                // always adjust balance, only exit if we have accounted for nested PI.
+                --balance;
+                if (balance == 0) {
+                    break;
+                }
+            }
+        } else if (lexer->lookahead == '<') {
+            advance(lexer);
+            if (lexer->lookahead == '?')
+                // found new PI, adjust balance.
+                ++balance;
+        }
+
+        advance(lexer);
     }
 
-    return false;
+    lexer->result_symbol = PI_CONTENT;
+    return true;
 }
 
 /// Scan for a Comment node
